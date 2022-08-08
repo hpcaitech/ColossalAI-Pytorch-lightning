@@ -1,0 +1,1 @@
+from .colossalai import ColossalAIPrecisionPlugin

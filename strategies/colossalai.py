@@ -5,7 +5,6 @@ import pytorch_lightning as pl
 import contextlib
 from typing import Optional, Generator, Union, Any
 from torch import Tensor
-from torch.distributed import ReduceOp
 from colossalai.gemini import ChunkManager, GeminiManager
 from colossalai.utils.model.colo_init_context import ColoInitContext
 from colossalai.utils import get_current_device
@@ -14,15 +13,18 @@ from colossalai.zero import ZeroOptimizer
 from colossalai.tensor import ProcessGroup
 from colossalai.nn.optimizer import CPUAdam, HybridAdam
 from pytorch_lightning.strategies.ddp import DDPStrategy
-from pytorch_lightning.strategies.parallel import ParallelStrategy
-from pytorch_lightning.strategies.strategy import Strategy, TBroadcast
 from pytorch_lightning.plugins.io import CheckpointIO
 from precision_plugins import ColossalAIPrecisionPlugin
 from pytorch_lightning.accelerators.cuda import CUDAAccelerator
 from pytorch_lightning.overrides.base import unwrap_lightning_module
-from pytorch_lightning.strategies.launchers.subprocess_script import _SubprocessScriptLauncher
 from pytorch_lightning.overrides.base import _LightningModuleWrapperBase, _LightningPrecisionModuleWrapperBase
 from colossalai.logging import get_dist_logger, disable_existing_loggers
+
+
+class ModelShardedContext(ColoInitContext):
+    def _post_init_method(self, module: torch.nn.Module, *args, **kwargs):
+        super()._post_init_method(module, *args, **kwargs)
+        module._colossalai_module = True
 
 
 class ColossalAIStrategy(DDPStrategy):
@@ -43,7 +45,6 @@ class ColossalAIStrategy(DDPStrategy):
         disable_existing_loggers()
         colossalai.launch({}, rank=self.global_rank, world_size=self.world_size, host=self.cluster_environment.main_address, port=self.cluster_environment.main_port,
                           local_rank=self.local_rank)
-        self._logger.info('====> init pg')
         self.process_group = ProcessGroup()
 
     @contextlib.contextmanager
@@ -54,7 +55,7 @@ class ColossalAIStrategy(DDPStrategy):
 
         Returns: Model parallel context.
         """
-        with ColoInitContext():
+        with ModelShardedContext():
             yield
 
     def setup_precision_plugin(self) -> None:
@@ -74,12 +75,14 @@ class ColossalAIStrategy(DDPStrategy):
         model = _LightningModuleWrapperBase(self.model)
         self.model = ZeroDDP(model, gemini_manager, self.force_outputs_fp32)
         self.optimizers = [ZeroOptimizer(optimizer, self.model, initial_scale=32)]
+        self.lightning_module._device = self.root_device
 
     def setup(self, trainer: "pl.Trainer") -> None:
         assert self.accelerator is not None
         self.accelerator.setup(trainer)
         self.setup_optimizers(trainer)
         self.setup_precision_plugin()
+        self.model_to_device()
 
     @property
     def root_device(self) -> torch.device:
@@ -88,7 +91,10 @@ class ColossalAIStrategy(DDPStrategy):
         return get_current_device()
 
     def model_to_device(self) -> None:
-        pass
+        pl_module = self.lightning_module
+        for child in pl_module.modules():
+            if child is not pl_module and getattr(child, '_colossalai_module', None) is not True:
+                child.to(self.root_device)
 
     @property
     def lightning_module(self) -> Optional["pl.LightningModule"]:

@@ -11,9 +11,12 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     get_linear_schedule_with_warmup,
+    BertForSequenceClassification
 )
 from data import GLUEDataModule
 from argparse import ArgumentParser
+from colossalai.nn.optimizer import HybridAdam
+from strategies import ColossalAIStrategy
 
 
 class GLUETransformer(LightningModule):
@@ -36,10 +39,14 @@ class GLUETransformer(LightningModule):
         self.save_hyperparameters()
 
         self.config = AutoConfig.from_pretrained(model_name_or_path, num_labels=num_labels)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, config=self.config)
+        # self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, config=self.config)
         self.metric = datasets.load_metric(
             "glue", self.hparams.task_name, experiment_id=datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
         )
+
+    def configure_sharded_model(self) -> None:
+        self.model = BertForSequenceClassification.from_pretrained(
+            self.hparams.model_name_or_path, config=self.config)
 
     def forward(self, **inputs):
         return self.model(**inputs)
@@ -97,7 +104,8 @@ class GLUETransformer(LightningModule):
                 "weight_decay": 0.0,
             },
         ]
-        optimizer = AdamW(optimizer_grouped_parameters, lr=self.hparams.learning_rate, eps=self.hparams.adam_epsilon)
+        optimizer = HybridAdam(optimizer_grouped_parameters, lr=self.hparams.learning_rate,
+                               eps=self.hparams.adam_epsilon)
 
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
@@ -112,6 +120,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--np', type=int, default=1)
     parser.add_argument('--batch_size', type=float, default=32)
+    parser.add_argument('--colossal', action='store_true', default=False)
     args = parser.parse_args()
     assert args.batch_size % args.np == 0
     local_batch_size = args.batch_size // args.np
@@ -130,11 +139,22 @@ if __name__ == '__main__':
         task_name=dm.task_name,
         train_batch_size=local_batch_size
     )
-
+    trainer_cfg = {
+        'accelerator': 'cuda',
+        'strategy': 'ddp',
+        'precision': 16,
+    }
+    if args.colossal:
+        trainer_cfg = {
+            'strategy': ColossalAIStrategy(
+                use_chunk=True,
+                enable_distributed_storage=True,
+                placement_policy='cuda'
+            )
+        }
     trainer = Trainer(
         max_epochs=3,
-        accelerator="cuda",
         devices=args.np,
-        strategy="ddp"
+        **trainer_cfg
     )
     trainer.fit(model, datamodule=dm)

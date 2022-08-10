@@ -75,11 +75,11 @@ class ColossalAIStrategy(DDPStrategy):
         model = _LightningModuleWrapperBase(self.model)
         self.model = ZeroDDP(model, gemini_manager, self.force_outputs_fp32)
         self.optimizers = [ZeroOptimizer(optimizer, self.model, initial_scale=32)]
-        self.lightning_module._device = self.root_device
 
     def setup(self, trainer: "pl.Trainer") -> None:
         assert self.accelerator is not None
         self.accelerator.setup(trainer)
+        self.lightning_module._device = self.root_device
         self.setup_optimizers(trainer)
         self.setup_precision_plugin()
         self.model_to_device()
@@ -92,6 +92,7 @@ class ColossalAIStrategy(DDPStrategy):
 
     def model_to_device(self) -> None:
         pl_module = self.lightning_module
+        pl_module._device = self.root_device
         for child in pl_module.modules():
             if child is not pl_module and getattr(child, '_colossalai_module', None) is not True:
                 child.to(self.root_device)

@@ -3,13 +3,9 @@ from typing import Optional
 
 import datasets
 import torch
-from pytorch_lightning import LightningDataModule, LightningModule, Trainer, seed_everything
-from torch.utils.data import DataLoader
+from pytorch_lightning import LightningModule, Trainer, seed_everything
 from transformers import (
-    AdamW,
     AutoConfig,
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
     get_linear_schedule_with_warmup,
     BertForSequenceClassification
 )
@@ -27,7 +23,7 @@ class GLUETransformer(LightningModule):
         task_name: str,
         learning_rate: float = 2e-5,
         adam_epsilon: float = 1e-8,
-        warmup_steps: int = 0,
+        warmup_fraction: float = 0.0,
         weight_decay: float = 0.0,
         train_batch_size: int = 32,
         eval_batch_size: int = 32,
@@ -39,7 +35,6 @@ class GLUETransformer(LightningModule):
         self.save_hyperparameters()
 
         self.config = AutoConfig.from_pretrained(model_name_or_path, num_labels=num_labels)
-        # self.model = AutoModelForSequenceClassification.from_pretrained(model_name_or_path, config=self.config)
         self.metric = datasets.load_metric(
             "glue", self.hparams.task_name, experiment_id=datetime.now().strftime("%d-%m-%Y_%H-%M-%S")
         )
@@ -106,10 +101,10 @@ class GLUETransformer(LightningModule):
         ]
         optimizer = HybridAdam(optimizer_grouped_parameters, lr=self.hparams.learning_rate,
                                eps=self.hparams.adam_epsilon)
-
+        num_warmup_steps = int(self.trainer.estimated_stepping_batches * self.hparams.warmup_fraction)
         scheduler = get_linear_schedule_with_warmup(
             optimizer,
-            num_warmup_steps=self.hparams.warmup_steps,
+            num_warmup_steps=num_warmup_steps,
             num_training_steps=self.trainer.estimated_stepping_batches,
         )
         scheduler = {"scheduler": scheduler, "interval": "step", "frequency": 1}
@@ -118,8 +113,13 @@ class GLUETransformer(LightningModule):
 
 if __name__ == '__main__':
     parser = ArgumentParser()
+    parser.add_argument('--task', default='mrpc')
     parser.add_argument('--np', type=int, default=1)
-    parser.add_argument('--batch_size', type=float, default=32)
+    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--lr', type=float, default=2.4e-5)
+    parser.add_argument('--weight_decay', type=float, default=0.01)
+    parser.add_argument('--warmup_fraction', type=float, default=0.1)
     parser.add_argument('--colossal', action='store_true', default=False)
     args = parser.parse_args()
     assert args.batch_size % args.np == 0
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     model_name = 'bert-base-uncased'
     dm = GLUEDataModule(
         model_name_or_path=model_name,
-        task_name="mrpc",
+        task_name=args.task,
         train_batch_size=local_batch_size
     )
     dm.setup("fit")
@@ -137,12 +137,14 @@ if __name__ == '__main__':
         num_labels=dm.num_labels,
         eval_splits=dm.eval_splits,
         task_name=dm.task_name,
-        train_batch_size=local_batch_size
+        train_batch_size=local_batch_size,
+        learning_rate=args.lr,
+        weight_decay=args.weight_decay,
+        warmup_fraction=args.warmup_fraction,
     )
     trainer_cfg = {
         'accelerator': 'cuda',
         'strategy': 'ddp',
-        'precision': 16,
     }
     if args.colossal:
         trainer_cfg = {
@@ -153,7 +155,7 @@ if __name__ == '__main__':
             )
         }
     trainer = Trainer(
-        max_epochs=3,
+        max_epochs=args.epochs,
         devices=args.np,
         **trainer_cfg
     )

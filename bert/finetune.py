@@ -83,7 +83,7 @@ class GLUETransformer(LightningModule):
         labels = torch.cat([x["labels"] for x in outputs]).detach().cpu().numpy()
         loss = torch.stack([x["loss"] for x in outputs]).mean()
         self.log("val_loss", loss, prog_bar=True, sync_dist=True)
-        self.log_dict(self.metric.compute(predictions=preds, references=labels), prog_bar=True)
+        self.log_dict(self.metric.compute(predictions=preds, references=labels), prog_bar=True, sync_dist=True)
 
     def configure_optimizers(self):
         """Prepare optimizer and schedule (linear warmup and decay)"""
@@ -129,7 +129,8 @@ if __name__ == '__main__':
     dm = GLUEDataModule(
         model_name_or_path=model_name,
         task_name=args.task,
-        train_batch_size=local_batch_size
+        train_batch_size=local_batch_size,
+        eval_batch_size=local_batch_size
     )
     dm.setup("fit")
     model = GLUETransformer(
@@ -138,6 +139,7 @@ if __name__ == '__main__':
         eval_splits=dm.eval_splits,
         task_name=dm.task_name,
         train_batch_size=local_batch_size,
+        eval_batch_size=local_batch_size,
         learning_rate=args.lr,
         weight_decay=args.weight_decay,
         warmup_fraction=args.warmup_fraction,

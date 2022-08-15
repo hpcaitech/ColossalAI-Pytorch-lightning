@@ -1,27 +1,15 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.backends.cudnn as cudnn
-import random
 import argparse
 import pytorch_lightning as pl
 from torchmetrics import Accuracy
+from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks import TQDMProgressBar
-import numpy as np
 from data import build_data
 from timm.models.vision_transformer import _create_vision_transformer, _cfg
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.nn.lr_scheduler import LinearWarmupLR
-import torch.backends.cudnn as cudnn
 from strategies import ColossalAIStrategy
-
-
-def set_seed(seed: int):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    cudnn.benchmark = False
-    cudnn.deterministic = True
 
 
 def vit_cifar(**kwargs):
@@ -33,12 +21,9 @@ def vit_cifar(**kwargs):
 
 
 class Cifar10PlModule(pl.LightningModule):
-    def __init__(self, num_epochs: int, num_warmup_epochs: int, num_steps_per_epoch: int, lr: float = 1e-3,
-                 adjust_lr_by_step: bool = False) -> None:
+    def __init__(self, warmup_epochs: int, lr: float = 1e-3, adjust_lr_by_step: bool = False) -> None:
         super().__init__()
-        self.num_epochs = num_epochs
-        self.num_warmup_epochs = num_warmup_epochs
-        self.num_steps_per_epoch = num_steps_per_epoch
+        self.warmup_epochs = warmup_epochs
         self.lr = lr
         self.adjust_lr_by_step = adjust_lr_by_step
         self.criterion = nn.CrossEntropyLoss()
@@ -50,12 +35,12 @@ class Cifar10PlModule(pl.LightningModule):
 
     def configure_optimizers(self):
         opt = HybridAdam(self.model.parameters(), self.lr)
-        total_steps = self.num_epochs
-        warmup_steps = self.num_warmup_epochs
+        total_steps = self.trainer.max_epochs
+        warmup_steps = self.warmup_epochs
         interval = 'epoch'
         if self.adjust_lr_by_step:
-            total_steps *= self.num_steps_per_epoch
-            warmup_steps *= self.num_steps_per_epoch
+            total_steps *= self.trainer.estimated_stepping_batches
+            warmup_steps *= self.trainer.estimated_stepping_batches
             interval = 'step'
         scheduler = LinearWarmupLR(opt, total_steps, warmup_steps)
         return {'optimizer': opt, 'lr_scheduler': {'scheduler': scheduler, 'interval': interval}}
@@ -88,7 +73,7 @@ if __name__ == '__main__':
     parser.add_argument('--colossal', action='store_true', default=False)
     args = parser.parse_args()
     assert args.batch_size % args.np == 0
-    set_seed(args.seed)
+    seed_everything(args.seed)
     batch_size_per_dp = args.batch_size // args.np
     trainer_cfg = {
         'accelerator': 'cuda',
@@ -105,5 +90,5 @@ if __name__ == '__main__':
     trainer = pl.Trainer(devices=args.np, max_epochs=args.epochs,
                          callbacks=[TQDMProgressBar()], **trainer_cfg)
     trainloader, testloader = build_data(batch_size_per_dp)
-    model = Cifar10PlModule(args.epochs, args.warmup, len(trainloader), args.lr, args.adjust_lr_by_step)
+    model = Cifar10PlModule(args.warmup, args.lr, args.adjust_lr_by_step)
     trainer.fit(model, trainloader, testloader)

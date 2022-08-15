@@ -1,4 +1,9 @@
-# CIFAR-10
+# ColossalAI Pytorch-lightning strategy
 
-DDP = 83.6%
-ColossalAI = 83.1%
+## Usage
+
+```python
+from strategies import ColossalAIStrategy
+
+trainer = Trainer(..., strategy=ColossalAIStrategy())
+```

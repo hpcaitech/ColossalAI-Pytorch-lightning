@@ -1,10 +1,8 @@
 import torch
-import torch.distributed as dist
 import colossalai
 import pytorch_lightning as pl
 import contextlib
-from typing import Optional, Generator, Union, Any
-from torch import Tensor
+from typing import Optional, Generator, Any
 from colossalai.gemini import ChunkManager, GeminiManager
 from colossalai.utils.model.colo_init_context import ColoInitContext
 from colossalai.utils import get_current_device
@@ -13,7 +11,6 @@ from colossalai.zero import ZeroOptimizer
 from colossalai.tensor import ProcessGroup
 from colossalai.nn.optimizer import CPUAdam, HybridAdam
 from pytorch_lightning.strategies.ddp import DDPStrategy
-from pytorch_lightning.plugins.io import CheckpointIO
 from precision_plugins import ColossalAIPrecisionPlugin
 from pytorch_lightning.accelerators.cuda import CUDAAccelerator
 from pytorch_lightning.overrides.base import unwrap_lightning_module
@@ -112,3 +109,8 @@ class ColossalAIStrategy(DDPStrategy):
 
     def lightning_module_state_dict(self):
         return self.model.state_dict()
+
+    @property
+    def handles_gradient_accumulation(self) -> bool:
+        """Whether the plugin handles gradient accumulation internally."""
+        return True

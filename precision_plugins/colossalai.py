@@ -1,7 +1,6 @@
 
-import torch
 import pytorch_lightning as pl
-from typing import Optional, Any, Generator, Union
+from typing import Optional, Any, Union
 from torch import Tensor
 from torch.optim import Optimizer
 from pytorch_lightning.plugins.precision.precision_plugin import PrecisionPlugin
@@ -16,7 +15,7 @@ class ColossalAIPrecisionPlugin(PrecisionPlugin):
         return optimizer.backward(closure_loss)
 
     def clip_grad_by_norm(self, optimizer: Optimizer, clip_val: Union[int, float]) -> None:
-        raise NotImplementedError
+        optimizer.clip_grad_norm(None, clip_val)
 
     def optimizer_step(self, model, optimizer, optimizer_idx: int, closure, **kwargs: Any) -> Any:
         closure_result = closure()

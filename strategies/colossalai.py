@@ -26,7 +26,17 @@ class ModelShardedContext(ColoInitContext):
 
 class ColossalAIStrategy(DDPStrategy):
 
-    def __init__(self, use_chunk: bool = True, chunk_size: Optional[int] = None, enable_distributed_storage: bool = True, placement_policy: str = 'auto', force_outputs_fp32: bool = False) -> None:
+    def __init__(
+        self,
+        use_chunk: bool = True,
+        chunk_size: Optional[int] = None,
+        enable_distributed_storage: bool = True,
+        placement_policy: str = 'auto',
+        force_outputs_fp32: bool = False,
+        gpu_margin_mem_ratio: float = 0.0,
+        search_chunk_size_config: Optional[dict] = None,
+        amp_config: Optional[dict] = None,
+    ) -> None:
         accelerator = CUDAAccelerator()
         precision_plugin = ColossalAIPrecisionPlugin()
         super().__init__(accelerator=accelerator, precision_plugin=precision_plugin)
@@ -35,6 +45,9 @@ class ColossalAIStrategy(DDPStrategy):
         self.enable_distributed_storage = enable_distributed_storage
         self.placement_policy = placement_policy
         self.force_outputs_fp32 = force_outputs_fp32
+        self.gpu_margin_mem_ratio = gpu_margin_mem_ratio
+        self.search_chunk_size_config = search_chunk_size_config or {'search_range': 64 * 1024**2, 'n_grids': 1024}
+        self.amp_config = amp_config or {}
         self._num_nodes = 1
         self._logger = get_dist_logger()
 
@@ -63,7 +76,7 @@ class ColossalAIStrategy(DDPStrategy):
         assert isinstance(optimizer, (CPUAdam, HybridAdam)
                           ), 'ColossalAIStrategy only supports colossalai.nn.optimizer.CPUAdam and colossalai.nn.optimizer.HybridAdam now'
         if self.use_chunk:
-            chunk_size = self.chunk_size or ChunkManager.search_chunk_size(self.model, 64 * 1024**2, 1024)
+            chunk_size = self.chunk_size or ChunkManager.search_chunk_size(self.model, **self.search_chunk_size_config)
         else:
             chunk_size = None
         chunk_manager = ChunkManager(chunk_size, self.process_group, self.enable_distributed_storage,
@@ -72,7 +85,8 @@ class ColossalAIStrategy(DDPStrategy):
         assert isinstance(self.model, (pl.LightningModule, _LightningPrecisionModuleWrapperBase))
         model = _LightningModuleWrapperBase(self.model)
         self.model = ZeroDDP(model, gemini_manager, self.force_outputs_fp32)
-        self.optimizers = [ZeroOptimizer(optimizer, self.model, initial_scale=32)]
+        self.optimizers = [ZeroOptimizer(optimizer, self.model,
+                                         gpu_margin_mem_ratio=self.gpu_margin_mem_ratio, **self.amp_config)]
 
     def setup(self, trainer: "pl.Trainer") -> None:
         assert self.accelerator is not None

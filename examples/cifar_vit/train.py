@@ -84,7 +84,8 @@ if __name__ == '__main__':
             'strategy': ColossalAIStrategy(
                 use_chunk=True,
                 enable_distributed_storage=True,
-                placement_policy='cuda'
+                placement_policy='cuda',
+                amp_config=dict(initial_scale=32)
             )
         }
     trainer = pl.Trainer(devices=args.np, max_epochs=args.epochs,

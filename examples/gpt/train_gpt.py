@@ -87,5 +87,6 @@ class GPTPretrain(pl.LightningModule):
 if __name__ == '__main__':
     gpt_pretrain = GPTPretrain(gpt2_tiny)
     train_dataloader = RandomDataloader(10, 2)
-    trainer = pl.Trainer(max_epochs=5, devices=4, strategy=ColossalAIStrategy(placement_policy='auto'))
+    trainer = pl.Trainer(max_epochs=5, devices=4, strategy=ColossalAIStrategy(
+        placement_policy='auto', amp_config=dict(initial_scale=32)))
     trainer.fit(gpt_pretrain, train_dataloader)

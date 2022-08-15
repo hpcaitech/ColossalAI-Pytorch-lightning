@@ -1,5 +1,4 @@
 import torch
-import colossalai
 import pytorch_lightning as pl
 import contextlib
 from typing import Optional, Generator, Any
@@ -16,6 +15,7 @@ from pytorch_lightning.accelerators.cuda import CUDAAccelerator
 from pytorch_lightning.overrides.base import unwrap_lightning_module
 from pytorch_lightning.overrides.base import _LightningModuleWrapperBase, _LightningPrecisionModuleWrapperBase
 from colossalai.logging import get_dist_logger, disable_existing_loggers
+from colossalai.core import global_context as gpc
 
 
 class ModelShardedContext(ColoInitContext):
@@ -40,8 +40,9 @@ class ColossalAIStrategy(DDPStrategy):
 
     def setup_distributed(self):
         disable_existing_loggers()
-        colossalai.launch({}, rank=self.global_rank, world_size=self.world_size, host=self.cluster_environment.main_address, port=self.cluster_environment.main_port,
-                          local_rank=self.local_rank)
+        gpc.init_global_dist(rank=self.global_rank, world_size=self.world_size, backend='nccl',
+                             host=self.cluster_environment.main_address, port=self.cluster_environment.main_port)
+        gpc.set_device(self.local_rank)
         self.process_group = ProcessGroup()
 
     @contextlib.contextmanager

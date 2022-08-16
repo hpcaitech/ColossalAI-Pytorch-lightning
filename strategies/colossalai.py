@@ -29,6 +29,9 @@ class ColossalAIStrategy(DDPStrategy):
     It only supports single optimizer which must be  `colossalai.nn.optimizer.CPUAdam`_ or `colossalai.nn.optimizer.HybridAdam`_ now.
     You must initialize your model in ``configure_sharded_model()``.
 
+    It configures accelerator and precision, and you should not configure them when initializing ``Trainer``.
+    CUDA is essential for this strategy. Please make sure CUDA is available.
+
     Example::
 
         class GLUETransformer(LightningModule):
@@ -38,6 +41,7 @@ class ColossalAIStrategy(DDPStrategy):
             def on_load_checkpoint(self, checkpoint) -> None:
                 if not hasattr(self, 'model'):
                     self.configure_sharded_model()
+        trainer = Trainer(..., strategy=ColossalAIStrategy())
 
     Args:
         use_chunk (bool, optional): Whether to use chunk-based memory management.

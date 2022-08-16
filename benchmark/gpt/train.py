@@ -9,7 +9,7 @@ from pytorch_lightning.strategies.ddp import DDPStrategy
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=3)
-    parser.add_argument('--steps_per_epoch', type=int, default=10)
+    parser.add_argument('--steps_per_epoch', type=int, default=5)
     parser.add_argument('--batch_size', type=int, default=1)
     parser.add_argument('--model', default='gpt2_xl')
     parser.add_argument('--np', type=int, default=1)
@@ -19,9 +19,11 @@ if __name__ == '__main__':
     parser.add_argument('--colossal', action='store_true', default=False)
     parser.add_argument('--placement_policy', default='cuda')
     parser.add_argument('--opt_gpu_margin_rat', type=float, default=0.0)
+    parser.add_argument('--cuda_mem_frac', type=float, default=1.0)
     args = parser.parse_args()
     model = GPTLitModule(args.model, checkpoint=not args.no_activation_ckpt,
-                         optimizer_nvme_offload_fraction=args.opt_nvme_offload_frac)
+                         optimizer_nvme_offload_fraction=args.opt_nvme_offload_frac,
+                         cuda_mem_fraction=args.cuda_mem_frac)
     train_dataloader = RandomDataloader(args.steps_per_epoch, args.batch_size, args.seq_len)
     trainer_cfg = {
         'accelerator': 'cuda',

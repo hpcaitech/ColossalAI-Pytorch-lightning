@@ -2,16 +2,21 @@ import torch.nn as nn
 import pytorch_lightning as pl
 from transformers import GPT2Config, GPT2LMHeadModel
 from colossalai.nn.optimizer import HybridAdam
-
+from colossalai.utils import colo_set_process_memory_fraction
 __all__ = ['GPTLitModule']
+
+
+class NoWeightInitGPT2LMHeadModel(GPT2LMHeadModel):
+    def _init_weights(self, module):
+        return
 
 
 class GPTLMModel(nn.Module):
     def __init__(self, hidden_size=768, num_layers=12, num_attention_heads=12, max_seq_len=1024, vocab_size=50257, checkpoint=False):
         super().__init__()
         self.checkpoint = checkpoint
-        self.model = GPT2LMHeadModel(GPT2Config(n_embd=hidden_size, n_layer=num_layers,
-                                     n_head=num_attention_heads, n_positions=max_seq_len, n_ctx=max_seq_len, vocab_size=vocab_size))
+        self.model = NoWeightInitGPT2LMHeadModel(GPT2Config(n_embd=hidden_size, n_layer=num_layers,
+                                                            n_head=num_attention_heads, n_positions=max_seq_len, n_ctx=max_seq_len, vocab_size=vocab_size))
         if checkpoint:
             self.model.gradient_checkpointing_enable()
 
@@ -145,12 +150,14 @@ class GPTLMLoss(nn.Module):
 
 
 class GPTLitModule(pl.LightningModule):
-    def __init__(self, model_name: str, checkpoint: bool = True, optimizer_nvme_offload_fraction: float = 0.0) -> None:
+    def __init__(self, model_name: str, checkpoint: bool = True, optimizer_nvme_offload_fraction: float = 0.0,
+                 cuda_mem_fraction: float = 1.0) -> None:
         super().__init__()
         self.model_name = model_name
         self.checkpoint = checkpoint
         self.optimizer_nvme_offload_fraction = optimizer_nvme_offload_fraction
         self.criterion = GPTLMLoss()
+        self.cuda_mem_fraction = cuda_mem_fraction
 
     def configure_sharded_model(self) -> None:
         self.model = get_gpt_model(self.model_name, self.checkpoint)
@@ -167,3 +174,7 @@ class GPTLitModule(pl.LightningModule):
         logits = self.model(input_ids, attention_mask)
         loss = self.criterion(logits, input_ids)
         return loss
+
+    def on_fit_start(self) -> None:
+        if self.cuda_mem_fraction < 1.0:
+            colo_set_process_memory_fraction(self.cuda_mem_fraction)

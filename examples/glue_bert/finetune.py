@@ -154,7 +154,7 @@ if __name__ == '__main__':
                 use_chunk=True,
                 enable_distributed_storage=True,
                 placement_policy='cuda',
-                amp_config=dict(initial_scale=32)
+                initial_scale=32
             )
         }
     trainer = Trainer(

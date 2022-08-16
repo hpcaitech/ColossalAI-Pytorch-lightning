@@ -153,7 +153,8 @@ if __name__ == '__main__':
             'strategy': ColossalAIStrategy(
                 use_chunk=True,
                 enable_distributed_storage=True,
-                placement_policy='cuda'
+                placement_policy='cuda',
+                initial_scale=32
             )
         }
     trainer = Trainer(

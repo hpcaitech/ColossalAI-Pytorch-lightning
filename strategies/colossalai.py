@@ -26,7 +26,18 @@ class ModelShardedContext(ColoInitContext):
 
 class ColossalAIStrategy(DDPStrategy):
     """ColossalAI strategy.
-    Only support `colossalai.nn.optimizer.CPUAdam`_ and `colossalai.nn.optimizer.HybridAdam`_ now.
+    It only supports single optimizer which must be  `colossalai.nn.optimizer.CPUAdam`_ or `colossalai.nn.optimizer.HybridAdam`_ now.
+    You must initialize your model in ``configure_sharded_model()``.
+
+    Example::
+
+        class GLUETransformer(LightningModule):
+            ...
+            def configure_sharded_model(self) -> None:
+                self.model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+            def on_load_checkpoint(self, checkpoint) -> None:
+                if not hasattr(self, 'model'):
+                    self.configure_sharded_model()
 
     Args:
         use_chunk (bool, optional): Whether to use chunk-based memory management.

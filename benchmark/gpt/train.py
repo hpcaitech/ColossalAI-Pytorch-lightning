@@ -5,6 +5,7 @@ from data import RandomDataloader
 from model import GPTLitModule
 from callback import MemoryMonitor
 from pytorch_lightning.strategies.ddp import DDPStrategy
+from pytorch_lightning.strategies.deepspeed import DeepSpeedStrategy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -16,26 +17,39 @@ if __name__ == '__main__':
     parser.add_argument('--no_activation_ckpt', action='store_true', default=False)
     parser.add_argument('--opt_nvme_offload_frac', type=float, default=0.0)
     parser.add_argument('--seq_len', type=int, default=1024)
-    parser.add_argument('--colossal', action='store_true', default=False)
     parser.add_argument('--placement_policy', default='cuda')
     parser.add_argument('--opt_gpu_margin_rat', type=float, default=0.0)
     parser.add_argument('--cuda_mem_frac', type=float, default=1.0)
+    parser.add_argument('--strategy', default='ddp', choices=['ddp', 'colossal', 'deepspeed'])
+    parser.add_argument('--offload', action='store_true', default=False)
     args = parser.parse_args()
     model = GPTLitModule(args.model, checkpoint=not args.no_activation_ckpt,
                          optimizer_nvme_offload_fraction=args.opt_nvme_offload_frac,
                          cuda_mem_fraction=args.cuda_mem_frac)
     train_dataloader = RandomDataloader(args.steps_per_epoch, args.batch_size, args.seq_len)
-    trainer_cfg = {
-        'accelerator': 'cuda',
-        'precision': 16,
-        'strategy': DDPStrategy(static_graph=True)
-    }
-    if args.colossal:
+    if args.strategy == 'ddp':
+        trainer_cfg = {
+            'accelerator': 'cuda',
+            'precision': 16,
+            'strategy': DDPStrategy(static_graph=True)
+        }
+    elif args.strategy == 'colossal':
         trainer_cfg = {
             'strategy': ColossalAIStrategy(
                 placement_policy=args.placement_policy,
                 gpu_margin_mem_ratio=args.opt_gpu_margin_rat,
                 initial_scale=32
+            )
+        }
+    elif args.strategy == 'deepspeed':
+        trainer_cfg = {
+            'accelerator': 'cuda',
+            'precision': 16,
+            'strategy': DeepSpeedStrategy(
+                stage=3,
+                offload_parameters=args.offload,
+                offload_optimizer=args.offload,
+                initial_scale_power=5
             )
         }
     trainer = pl.Trainer(

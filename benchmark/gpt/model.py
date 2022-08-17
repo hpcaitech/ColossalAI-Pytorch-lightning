@@ -3,7 +3,11 @@ import pytorch_lightning as pl
 from transformers import GPT2Config, GPT2LMHeadModel
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import colo_set_process_memory_fraction
-__all__ = ['GPTLitModule']
+from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
+from torch.optim import Adam, Optimizer
+from functools import partial
+from typing import Callable, Iterable
+__all__ = ['GPTLitModule', 'get_optimizer']
 
 
 class NoWeightInitGPT2LMHeadModel(GPT2LMHeadModel):
@@ -149,13 +153,28 @@ class GPTLMLoss(nn.Module):
         return self.loss(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
 
 
+def get_optimizer(strategy: str, **kwargs) -> Callable[[Iterable], Optimizer]:
+    assert strategy in ('ddp', 'deepspeed', 'colossal')
+    if strategy == 'ddp':
+        opt_cls = Adam
+    elif strategy == 'deepspeed':
+        offload = kwargs.pop('offload')
+        if offload:
+            opt_cls = DeepSpeedCPUAdam
+        else:
+            opt_cls = FusedAdam
+    else:
+        opt_cls = HybridAdam
+    return partial(opt_cls, **kwargs)
+
+
 class GPTLitModule(pl.LightningModule):
-    def __init__(self, model_name: str, checkpoint: bool = True, optimizer_nvme_offload_fraction: float = 0.0,
-                 cuda_mem_fraction: float = 1.0) -> None:
+    def __init__(self, model_name: str, optimizer_init_fn: Callable[[Iterable], Optimizer],
+                 checkpoint: bool = True, cuda_mem_fraction: float = 1.0) -> None:
         super().__init__()
         self.model_name = model_name
+        self.optimizer_init_fn = optimizer_init_fn
         self.checkpoint = checkpoint
-        self.optimizer_nvme_offload_fraction = optimizer_nvme_offload_fraction
         self.criterion = GPTLMLoss()
         self.cuda_mem_fraction = cuda_mem_fraction
 
@@ -167,7 +186,7 @@ class GPTLitModule(pl.LightningModule):
             self.configure_sharded_model()
 
     def configure_optimizers(self):
-        return HybridAdam(self.model.parameters(), lr=1e-3, nvme_offload_dir='./offload', nvme_offload_fraction=self.optimizer_nvme_offload_fraction)
+        return self.optimizer_init_fn(self.model.parameters())
 
     def training_step(self, batch, batch_idx):
         input_ids, attention_mask = batch

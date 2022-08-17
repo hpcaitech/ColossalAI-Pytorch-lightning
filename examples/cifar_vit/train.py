@@ -9,7 +9,7 @@ from data import build_data
 from timm.models.vision_transformer import _create_vision_transformer, _cfg
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.nn.lr_scheduler import LinearWarmupLR
-from strategies import ColossalAIStrategy
+from pytorch_lightning.strategies.colossalai import ColossalAIStrategy
 
 
 def vit_cifar(**kwargs):

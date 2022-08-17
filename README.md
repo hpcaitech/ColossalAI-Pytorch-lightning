@@ -3,7 +3,7 @@
 ## Usage
 
 ```python
-from strategies import ColossalAIStrategy
+from pytorch_lightning.strategies.colossalai import ColossalAIStrategy
 
 trainer = Trainer(..., strategy=ColossalAIStrategy())
 ```

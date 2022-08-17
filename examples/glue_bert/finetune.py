@@ -12,7 +12,7 @@ from transformers import (
 from data import GLUEDataModule
 from argparse import ArgumentParser
 from colossalai.nn.optimizer import HybridAdam
-from strategies import ColossalAIStrategy
+from pytorch_lightning.strategies.colossalai import ColossalAIStrategy
 
 
 class GLUETransformer(LightningModule):

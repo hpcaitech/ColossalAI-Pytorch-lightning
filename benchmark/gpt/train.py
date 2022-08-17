@@ -1,11 +1,11 @@
 import pytorch_lightning as pl
 import argparse
-from strategies import ColossalAIStrategy
 from data import RandomDataloader
 from model import GPTLitModule, get_optimizer
 from callback import MemoryMonitor
 from pytorch_lightning.strategies.ddp import DDPStrategy
 from pytorch_lightning.strategies.deepspeed import DeepSpeedStrategy
+from pytorch_lightning.strategies.colossalai import ColossalAIStrategy
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

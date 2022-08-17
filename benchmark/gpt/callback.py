@@ -7,6 +7,7 @@ from pytorch_lightning.callbacks import Callback
 def print_rank_0(*args, **kwargs):
     if dist.get_rank() == 0:
         print(*args, **kwargs)
+    dist.barrier()
 
 
 def get_cpu_mem():

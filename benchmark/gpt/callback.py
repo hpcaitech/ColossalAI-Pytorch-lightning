@@ -23,7 +23,9 @@ class MemoryMonitor(Callback):
 
     def on_fit_start(self, trainer, pl_module) -> None:
         max_cuda_mem = torch.cuda.max_memory_allocated()
+        cuda_mem = torch.cuda.memory_allocated()
         print_rank_0(f'CPU memory before training: {get_cpu_mem()/1024**2:.3f} MB')
+        print_rank_0(f'CUDA memory before training: {cuda_mem/1024**2:.3f} MB')
         print_rank_0(f'Max CUDA memory before training: {max_cuda_mem/1024**2:.3f} MB')
 
     def on_fit_end(self, trainer, pl_module) -> None:

@@ -1,26 +1,35 @@
 import torch.nn as nn
 import pytorch_lightning as pl
-from transformers import GPT2Config, GPT2LMHeadModel
+from transformers import GPT2Config, GPT2LMHeadModel, GPT2PreTrainedModel
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import colo_set_process_memory_fraction
 from deepspeed.ops.adam import DeepSpeedCPUAdam, FusedAdam
 from torch.optim import Adam, Optimizer
 from functools import partial
 from typing import Callable, Iterable
+from contextlib import contextmanager
 __all__ = ['GPTLitModule', 'get_optimizer']
 
 
-class NoWeightInitGPT2LMHeadModel(GPT2LMHeadModel):
-    def _init_weights(self, module):
+@contextmanager
+def no_init_weights():
+    def dummy_fn(*args):
         return
+    try:
+        old_init_weights = GPT2PreTrainedModel._init_weights
+        GPT2PreTrainedModel._init_weights = dummy_fn
+        yield
+    finally:
+        GPT2PreTrainedModel._init_weights = old_init_weights
 
 
 class GPTLMModel(nn.Module):
     def __init__(self, hidden_size=768, num_layers=12, num_attention_heads=12, max_seq_len=1024, vocab_size=50257, checkpoint=False):
         super().__init__()
         self.checkpoint = checkpoint
-        self.model = NoWeightInitGPT2LMHeadModel(GPT2Config(n_embd=hidden_size, n_layer=num_layers,
-                                                            n_head=num_attention_heads, n_positions=max_seq_len, n_ctx=max_seq_len, vocab_size=vocab_size))
+        with no_init_weights():
+            self.model = GPT2LMHeadModel(GPT2Config(n_embd=hidden_size, n_layer=num_layers,
+                                                    n_head=num_attention_heads, n_positions=max_seq_len, n_ctx=max_seq_len, vocab_size=vocab_size))
         if checkpoint:
             self.model.gradient_checkpointing_enable()
 

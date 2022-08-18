@@ -8,12 +8,26 @@ GPU: A100 (40G)
 
 We fix the batch size per GPU to 1.
 
-| Strategy | GPUs | Max model size |
-| --- | --- | --- |
-| deepspeed (zero3 offload) | 1 | TBD |
-| colssalai (auto) | 1 | TBD |
-| deepspeed (zero3 offload) | 8 | TBD |
-| colssalai (auto) | 8 | TBD |
+| Strategy | GPUs | Max model size (B) |  Max CUDA memory allocated (MB) | Step time (sec) |
+| --- | --- | --- | --- | --- |
+| deepspeed (zero3 offload) | 1 | 18 | 5699.500 | 39.32 |
+| colssalai (auto) | 1 | 24 | 36483.311 | 69.54 |
+| deepspeed (zero3) | 8 | 12 | 29751.203 | 9.06 |
+| colssalai (cuda) | 8 | 12 | 24504.032 | 7.07 |
+
+Commands:
+
+Deepspeed:
+```shell
+python train.py --epochs 1 --steps_per_epoch 3 --model gpt2_18B --strategy deepspeed --offload
+python train.py --epochs 1 --steps_per_epoch 3 --model gpt2_12B --strategy deepspeed --np 8
+```
+
+ColossalAI:
+```shell
+python train.py --epochs 1 --steps_per_epoch 3 --model gpt2_24B --strategy colossal --placement_policy auto --opt_gpu_margin_rat 0.9
+python train.py --epochs 1 --steps_per_epoch 3 --model gpt2_12B --strategy colossal --np 8
+```
 
 ## Small model comparison
 

@@ -76,11 +76,11 @@ if __name__ == '__main__':
     seed_everything(args.seed)
     batch_size_per_dp = args.batch_size // args.np
     trainer_cfg = {
-        'accelerator': 'cuda',
         'strategy': 'ddp'
     }
     if args.colossal:
         trainer_cfg = {
+            'precision': 16,
             'strategy': ColossalAIStrategy(
                 use_chunk=True,
                 enable_distributed_storage=True,
@@ -88,8 +88,9 @@ if __name__ == '__main__':
                 initial_scale=32
             )
         }
-    trainer = pl.Trainer(devices=args.np, max_epochs=args.epochs,
-                         callbacks=[TQDMProgressBar()], **trainer_cfg)
+    trainer = pl.Trainer(accelerator='gpu', devices=args.np,
+                         max_epochs=args.epochs, callbacks=[TQDMProgressBar()],
+                         **trainer_cfg)
     trainloader, testloader = build_data(batch_size_per_dp)
     model = Cifar10PlModule(args.warmup, args.lr, args.adjust_lr_by_step)
     trainer.fit(model, trainloader, testloader)

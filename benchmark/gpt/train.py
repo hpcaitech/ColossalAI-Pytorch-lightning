@@ -29,12 +29,14 @@ if __name__ == '__main__':
     optimizer_cfg = {'lr': args.lr}
     if args.strategy == 'ddp':
         trainer_cfg = {
-            'accelerator': 'cuda',
+            'accelerator': 'gpu',
             'precision': 16,
             'strategy': DDPStrategy(static_graph=True)
         }
     elif args.strategy == 'colossal':
         trainer_cfg = {
+            'accelerator': 'gpu',
+            'precision': 16,
             'strategy': ColossalAIStrategy(
                 placement_policy=args.placement_policy,
                 gpu_margin_mem_ratio=args.opt_gpu_margin_rat,
@@ -45,7 +47,7 @@ if __name__ == '__main__':
         optimizer_cfg['nvme_offload_fraction'] = args.opt_nvme_offload_frac
     elif args.strategy == 'deepspeed':
         trainer_cfg = {
-            'accelerator': 'cuda',
+            'accelerator': 'gpu',
             'precision': 16,
             'strategy': DeepSpeedStrategy(
                 stage=3,

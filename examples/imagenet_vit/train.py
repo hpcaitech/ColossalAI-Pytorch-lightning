@@ -87,7 +87,6 @@ if __name__ == '__main__':
                                 gpu_aug=True)
     model = ViTModule(mixup=True, schedule_lr_by_step=args.schedule_lr_by_step)
     trainer_cfg = {
-        'accelerator': 'cuda',
         'strategy': 'ddp',
     }
     trainer = pl.Trainer(

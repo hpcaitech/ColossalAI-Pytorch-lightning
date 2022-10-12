@@ -145,11 +145,11 @@ if __name__ == '__main__':
         warmup_fraction=args.warmup_fraction,
     )
     trainer_cfg = {
-        'accelerator': 'cuda',
         'strategy': 'ddp',
     }
     if args.colossal:
         trainer_cfg = {
+            'precision': 16,
             'strategy': ColossalAIStrategy(
                 use_chunk=True,
                 enable_distributed_storage=True,
@@ -158,8 +158,9 @@ if __name__ == '__main__':
             )
         }
     trainer = Trainer(
-        max_epochs=args.epochs,
+        accelerator="gpu",
         devices=args.np,
+        max_epochs=args.epochs,
         **trainer_cfg
     )
     trainer.fit(model, datamodule=dm)
